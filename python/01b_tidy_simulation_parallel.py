@@ -1,0 +1,100 @@
+"""Parallel tidy simulation example for a power analysis. Run this file using `uv run tidy_simulation_parallel.py`."""
+
+import numpy as np
+import polars as pl
+import statsmodels.api as sm
+from polarsgrid import expand_grid
+from tqdm import tqdm
+from multiprocessing import Pool, freeze_support
+
+# Component 1: the simulation grid
+grid = expand_grid(
+    sample_size=list(np.arange(4, 20)),
+    effect_size=list(np.arange(0, 1.1, 0.1)),
+    outcome=["post", "change"],
+    correction=[False, True],
+    iteration=list(range(500)),
+    _categorical=True,
+    _row_id=True,
+)
+grid = grid.with_columns(seed=np.random.randint(low=0, high=2**32 // 2, size=len(grid)))
+grid.write_parquet("grid.parquet")
+
+
+# Component 2: data generation function
+def generate_data(sample_size: int, effect_size: float, seed: int) -> pl.DataFrame:
+    np.random.seed(seed)
+
+    # sample pre and post variables
+    treated = np.arange(sample_size) < (sample_size // 2)
+    pre = np.random.normal(0, 3, sample_size)
+    post = pre + np.random.normal(0, 0.3, sample_size)
+    post[treated] += effect_size
+
+    # return a tidy dataframe
+    return pl.DataFrame(
+        {
+            "id": np.arange(sample_size),
+            "treated": treated,
+            "pre": pre,
+            "post": post,
+        }
+    )
+
+
+# Component 3: data analysis functoin
+def analyze_data(
+    df: pl.DataFrame, outcome: str, correction: bool
+) -> tuple[float, float, bool]:
+    # cast treated column to integer, needed for model fitting
+    df = df.with_columns(pl.col.treated.cast(int))
+
+    # select columns based on simulation factors
+    endog = df["post"] - df["pre"] if outcome == "change" else df["post"]
+    exog = df.select(["treated", "pre"]) if correction else df.select("treated")
+
+    # create and fit the model
+    mod = sm.OLS(endog.to_numpy(), sm.add_constant(exog.to_numpy()))
+    res = mod.fit()
+
+    # return values of interest, including multicollinearity indicator
+    return res.params[1], res.pvalues[1], res.eigenvals[-1] < 1e-10
+
+
+# Run the simulation in a sliced way using multiprocessing
+# and produce Component 4: the results table
+def run_simulation(slice_num: int, slice: pl.DataFrame):
+    estimates = []
+    pvalues = []
+    singulars = []
+
+    # iterate over each row in the slice
+    for row in slice.iter_rows(named=True):
+        df = generate_data(
+            sample_size=row["sample_size"],
+            effect_size=row["effect_size"],
+            seed=row["seed"],
+        )
+        est, pval, singular = analyze_data(
+            df=df, outcome=row["outcome"], correction=row["correction"]
+        )
+        estimates.append(est)
+        pvalues.append(pval)
+        singulars.append(singular)
+
+    # create a dataframe for the results
+    results_slice = pl.DataFrame(
+        data=[estimates, pvalues, singulars], schema=["estimate", "pvalue", "singular"]
+    )
+
+    # write the slice to disk in parquet file
+    results_slice.write_parquet(f"output/{slice_num:06}.parquet")
+
+
+if __name__ == "__main__":
+    freeze_support()
+    with Pool() as p:
+        p.starmap(
+            run_simulation,
+            tqdm(enumerate(grid.iter_slices(10000)), total=len(grid) // 10000 + 1),
+        )

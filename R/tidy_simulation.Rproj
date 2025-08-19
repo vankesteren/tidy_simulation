@@ -1,0 +1,18 @@
+Version: 1.0
+ProjectId: 81c81886-353d-4d0e-8d24-ad0c4246afa5
+
+RestoreWorkspace: No
+SaveWorkspace: No
+AlwaysSaveHistory: No
+
+EnableCodeIndexing: Yes
+UseSpacesForTab: Yes
+NumSpacesForTab: 2
+Encoding: UTF-8
+
+RnwWeave: Sweave
+LaTeX: pdfLaTeX
+
+QuitChildProcessesOnExit: Yes
+
+ProjectName: tidy_simulation

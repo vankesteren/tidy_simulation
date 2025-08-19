@@ -1,0 +1,13 @@
+[project]
+name = "tidy-simulation"
+version = "0.1.0"
+description = "Example implementation of a tidy simulation using polars and plotnine"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.3.2",
+    "plotnine>=0.15.0",
+    "polars[pyarrow]>=1.32.3",
+    "polarsgrid>=0.2.0",
+    "tqdm>=4.67.1",
+]
