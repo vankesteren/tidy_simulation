@@ -3,10 +3,9 @@
 import polars as pl
 import plotnine as p9
 
-results_table = pl.read_parquet("output/*.parquet")
 simulation_grid = pl.read_parquet("processed_data/grid.parquet")
-analysis_df = pl.concat([simulation_grid, results_table], how="horizontal")
-
+results_table = pl.read_parquet("processed_data/results.parquet")
+analysis_df = simulation_grid.join(results_table, on="row_id", how="left")
 
 df_agg = (
     # start with the dataframe of grid parameters and results
@@ -18,7 +17,9 @@ df_agg = (
         bias=pl.col.estimate - pl.col.effect_size, reject=pl.col.pvalue < 0.05
     )
     # then group by all the simulation factors
-    .group_by(["sample_size", "effect_size", "outcome", "correction"], maintain_order=True)
+    .group_by(
+        ["sample_size", "effect_size", "outcome", "correction"], maintain_order=True
+    )
     # aggregate over iterations, with quantile interval for the bias
     .agg(
         bias=pl.col.bias.mean(),

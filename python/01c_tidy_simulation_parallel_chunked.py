@@ -1,11 +1,11 @@
-"""Tidy simulation example for a power analysis"""
+"""Parallel, chunked tidy simulation example for a power analysis. Run this file using `uv run 01c_tidy_simulation_parallel_chunked.py`."""
 
 import numpy as np
 import polars as pl
 import statsmodels.api as sm
 from polarsgrid import expand_grid
 from tqdm import tqdm
-
+from multiprocessing import Pool
 
 # Component 1: the simulation grid
 grid = expand_grid(
@@ -42,7 +42,7 @@ def generate_data(sample_size: int, effect_size: float, seed: int) -> pl.DataFra
     )
 
 
-# Component 3: data analysis function
+# Component 3: data analysis functoin
 def analyze_data(
     df: pl.DataFrame, outcome: str, correction: bool
 ) -> tuple[float, float, bool]:
@@ -61,24 +61,37 @@ def analyze_data(
     return res.params[1], res.pvalues[1], res.eigenvals[-1] < 1e-10
 
 
-# Component 4: results table
-# Run the simulation for each row, add a progress bar
-results_list = []
-for row_id, row in tqdm(enumerate(grid.iter_rows(named=True)), total=len(grid)):
-    df = generate_data(
-        sample_size=row["sample_size"],
-        effect_size=row["effect_size"],
-        seed=row["seed"],
-    )
-    est, pval, singular = analyze_data(
-        df=df, outcome=row["outcome"], correction=row["correction"]
-    )
-    results_list.append((row_id, est, pval, singular))
+# Run the simulation in a sliced way using multiprocessing
+# and produce Component 4: the results table
+def run_simulation(slice_num: int, slice: pl.DataFrame):
+    results_list = []
 
-# create a nice data frame and store it
-df_results = pl.DataFrame(
-    results_list,
-    schema={"row_id": int, "estimate": float, "pvalue": float, "singular": bool},
-    orient="row",
-)
-df_results.write_parquet("processed_data/results.parquet")
+    # iterate over each row in the slice
+    for row in slice.iter_rows(named=True):
+        df = generate_data(
+            sample_size=row["sample_size"],
+            effect_size=row["effect_size"],
+            seed=row["seed"],
+        )
+        est, pval, singular = analyze_data(
+            df=df, outcome=row["outcome"], correction=row["correction"]
+        )
+        results_list.append((est, pval, singular))
+
+    # create a dataframe for the results
+    results_slice = pl.DataFrame(
+        results_list,
+        schema={"estimate": float, "pvalue": float, "singular": bool},
+        orient="row",
+    )
+
+    # write the slice to disk in parquet file
+    results_slice.write_parquet(f"output/{slice_num:06}.parquet")
+
+
+if __name__ == "__main__":
+    with Pool() as p:
+        p.starmap(
+            run_simulation,
+            tqdm(enumerate(grid.iter_slices(10000)), total=len(grid) // 10000 + 1),
+        )

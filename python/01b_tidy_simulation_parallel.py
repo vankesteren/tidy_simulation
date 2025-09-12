@@ -1,11 +1,11 @@
-"""Parallel tidy simulation example for a power analysis. Run this file using `uv run tidy_simulation_parallel.py`."""
+"""Parallel tidy simulation example for a power analysis. Run this file using `uv run 01b_tidy_simulation_parallel.py`."""
 
 import numpy as np
 import polars as pl
 import statsmodels.api as sm
 from polarsgrid import expand_grid
 from tqdm import tqdm
-from multiprocessing import Pool, freeze_support
+from multiprocessing import Pool
 
 # Component 1: the simulation grid
 grid = expand_grid(
@@ -18,7 +18,7 @@ grid = expand_grid(
     _row_id=True,
 )
 grid = grid.with_columns(seed=np.random.randint(low=0, high=2**32 // 2, size=len(grid)))
-grid.write_parquet("grid.parquet")
+grid.write_parquet("processed_data/grid.parquet")
 
 
 # Component 2: data generation function
@@ -42,7 +42,7 @@ def generate_data(sample_size: int, effect_size: float, seed: int) -> pl.DataFra
     )
 
 
-# Component 3: data analysis functoin
+# Component 3: data analysis function
 def analyze_data(
     df: pl.DataFrame, outcome: str, correction: bool
 ) -> tuple[float, float, bool]:
@@ -61,40 +61,30 @@ def analyze_data(
     return res.params[1], res.pvalues[1], res.eigenvals[-1] < 1e-10
 
 
-# Run the simulation in a sliced way using multiprocessing
-# and produce Component 4: the results table
-def run_simulation(slice_num: int, slice: pl.DataFrame):
-    estimates = []
-    pvalues = []
-    singulars = []
-
-    # iterate over each row in the slice
-    for row in slice.iter_rows(named=True):
-        df = generate_data(
-            sample_size=row["sample_size"],
-            effect_size=row["effect_size"],
-            seed=row["seed"],
-        )
-        est, pval, singular = analyze_data(
-            df=df, outcome=row["outcome"], correction=row["correction"]
-        )
-        estimates.append(est)
-        pvalues.append(pval)
-        singulars.append(singular)
-
-    # create a dataframe for the results
-    results_slice = pl.DataFrame(
-        data=[estimates, pvalues, singulars], schema=["estimate", "pvalue", "singular"]
+# Component 4: results table
+# Define a function which returns one row of the results table
+def run_simulation(id: int, params: dict):
+    df = generate_data(
+        sample_size=params["sample_size"],
+        effect_size=params["effect_size"],
+        seed=params["seed"],
     )
+    est, pval, singular = analyze_data(
+        df=df, outcome=params["outcome"], correction=params["correction"]
+    )
+    return (id, est, pval, singular)
 
-    # write the slice to disk in parquet file
-    results_slice.write_parquet(f"output/{slice_num:06}.parquet")
 
-
+# Run this function in parallel
 if __name__ == "__main__":
-    freeze_support()
     with Pool() as p:
-        p.starmap(
+        results_list = p.starmap(
             run_simulation,
-            tqdm(enumerate(grid.iter_slices(10000)), total=len(grid) // 10000 + 1),
+            tqdm(enumerate(grid.iter_rows(named=True)), total=len(grid)),
         )
+    df = pl.DataFrame(
+        results_list,
+        schema={"row_id": int, "estimate": float, "pvalue": float, "singular": bool},
+        orient="row",
+    )
+    df.write_parquet("processed_data/results.parquet")
