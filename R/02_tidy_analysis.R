@@ -6,21 +6,16 @@ simulation_grid <- read_parquet("processed_data/grid.parquet")
 
 # load the results
 # if using chunked:
-# results_list <- lapply(Sys.glob("output/*.parquet"), read_parquet)
+# results_list <- lapply(Sys.glob("processed_data/chunked_output/*.parquet"), read_parquet)
 # results_table <- bind_rows(results_list)
 # otherwise:
 results_table <- read_parquet("processed_data/results.parquet")
 
-
-# combine them
-# if results are complete:
-# analysis_df <- bind_cols(simulation_grid, results_table)
-
-# if results are not yet complete:
+# combine them using a left join
 analysis_df <- left_join(
-  x = simulation_grid |> rowid_to_column(), 
-  y = results_table |> rowid_to_column(), 
-  by = join_by(rowid)
+  x = simulation_grid, 
+  y = results_table, 
+  by = join_by(row_id)
 )
 
 df_agg <- 

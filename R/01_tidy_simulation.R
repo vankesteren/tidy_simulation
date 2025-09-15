@@ -50,10 +50,10 @@ analyze_data <- function(df, outcome = "post", correction = TRUE) {
   fit <- lm(frm, data = df)
   
   # then, return the values we need
-  return(c(
-    "estimate" = unname(coef(res)["treatedTRUE"]),
-    "pvalue" = summary(res)$coefficients["treatedTRUE", "Pr(>|t|)"],
-    "converged" = res$rank < length(coef(res))
+  return(list(
+    "estimate" = unname(coef(fit)["treatedTRUE"]),
+    "pvalue" = summary(fit)$coefficients["treatedTRUE", "Pr(>|t|)"],
+    "converged" = fit$rank == length(coef(fit))
   ))
 }
 
@@ -67,17 +67,20 @@ run_simulation <- function(idx) {
     effect_size = args$effect_size,
     seed = args$seed
   )
-  return(analyze_data(
+  res <- analyze_data(
     df = df,
     outcome = args$outcome,
     correction = args$correction
-  ))
+  )
+  res$row_id <- idx
+  return(res)
 }
+
 
 # iterate over each row in the grid
 results_list <- pblapply(1:nrow(grid), run_simulation)
 
 # create a dataframe for the results
-results_table <- bind_rows(results_list)
+results_table <- bind_rows(results_list) |> relocate(row_id)
 write_parquet(results_table, "processed_data/results.parquet")
 
