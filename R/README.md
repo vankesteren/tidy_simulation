@@ -16,7 +16,7 @@ Project management for this repository is done via an [RStudio project](https://
    ```R
    install.packages(c("tidyverse", "nanoparquet", "pbapply"))
    ```
-6. Run the simulation by running the code in either `01_tidy_simulation.R` or (for the parallel version) `01b_tidy_simulation_parallel.R`
+6. Run the simulation by running the code in either `01a_tidy_simulation.R` or (for the parallel version) `01b_tidy_simulation_parallel.R`
 7. Run the analyses using `02_tidy_analysis.R`.
 8. Admire the images in the `img/` subfolder!
 
