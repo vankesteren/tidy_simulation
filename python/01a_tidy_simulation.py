@@ -1,4 +1,4 @@
-"""Tidy simulation example for a power analysis"""
+"""Tidy simulation example for a power analysis. Run this file using `uv run 01b_tidy_simulation_parallel.py`."""
 
 import numpy as np
 import polars as pl

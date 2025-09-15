@@ -1,2 +1,3 @@
 *
 !.gitignore
+!chunked_output/

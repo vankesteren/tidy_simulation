@@ -86,7 +86,7 @@ def run_simulation(slice_num: int, slice: pl.DataFrame):
     )
 
     # write the slice to disk in parquet file
-    results_slice.write_parquet(f"output/{slice_num:06}.parquet")
+    results_slice.write_parquet(f"processed_data/chunked_output/{slice_num:06}.parquet")
 
 
 if __name__ == "__main__":

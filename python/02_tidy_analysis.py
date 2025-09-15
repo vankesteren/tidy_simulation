@@ -5,6 +5,7 @@ import plotnine as p9
 
 simulation_grid = pl.read_parquet("processed_data/grid.parquet")
 results_table = pl.read_parquet("processed_data/results.parquet")
+# results_table = pl.read_parquet("processed_data/chunked_output/*.parquet").with_columns(pl.row_index("row_id"))
 analysis_df = simulation_grid.join(results_table, on="row_id", how="left")
 
 df_agg = (
